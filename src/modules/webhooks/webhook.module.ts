@@ -3,10 +3,9 @@ import { WebhookController } from './webhook.controller';
 import { WebhookService } from './webhook.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Customer } from '../customer/customer.entity';
-import { Address } from '../customer/address.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Customer, Address])],
+  imports: [TypeOrmModule.forFeature([Customer])],
   controllers: [WebhookController],
   providers: [WebhookService],
 })

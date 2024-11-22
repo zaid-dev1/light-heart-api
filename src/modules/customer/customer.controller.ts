@@ -4,36 +4,60 @@ import {
   Get,
   NotFoundException,
   Param,
+  Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { CustomerService } from './customer.service';
 import { Customer } from './customer.entity';
-import { Address } from './address.entity';
+import { UpdateRoleDto } from './update-role.dto';
 
 @Controller('customers')
 export class CustomerController {
   constructor(private readonly customerService: CustomerService) {}
 
-  @Get(':id')
+  @Get('protected/:id')
   async getCustomerById(
     @Param('id') id: string,
-  ): Promise<{ message: string; customer: Customer }> {
-    const customer = await this.customerService.getCustomerById(id);
+  ): Promise<{ message: string; customer?: Customer }> {
+    return this.customerService.getCustomerById(id);
+  }
 
-    if (!customer) {
-      throw new NotFoundException(`Customer with ID ${id} not found.`);
-    }
+  @Get('protected/admin/all')
+  async getAllCustomers(
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 10,
+  ): Promise<{
+    message: string;
+    customers: Customer[];
+    pagination: { total: number; page: number; limit: number };
+  }> {
+    return this.customerService.getAllCustomers(page, limit);
+  }
 
-    return {
-      message: 'Customer retrieved successfully.',
-      customer,
-    };
+  @Patch('protected/:id/role')
+  async updateCustomerRole(
+    @Param('id') id: string,
+    @Body() updateRoleDto: UpdateRoleDto,
+  ): Promise<{ message: string; customer?: Customer }> {
+    return this.customerService.updateCustomerRole(id, updateRoleDto);
   }
 
   @Post('initialize') // Run this route once to save customers
   async initializeCustomers(): Promise<string> {
     await this.customerService.saveCustomersOnce();
     return 'Customers have been initialized and saved successfully.';
+  }
+
+  @Post('login')
+  async login(@Body() body: { email: string; password: string }): Promise<any> {
+    const { email, password } = body;
+    try {
+      const result = await this.customerService.login(email, password);
+      return result;
+    } catch (error) {
+      return { message: error.message };
+    }
   }
 
   @Post('nearby')
@@ -46,7 +70,12 @@ export class CustomerController {
     @Body('roles') roles: string[],
   ): Promise<{
     message: string;
-    customers: { customer: Customer; addresses: Address[] }[];
+    customers: { customer: Customer; businessProfile: {} }[];
+    pagination: {
+      total: number;
+      page: number;
+      limit: number;
+    };
   }> {
     const latitude = parseFloat(lat);
     const longitude = parseFloat(lng);

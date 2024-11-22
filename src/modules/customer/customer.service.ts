@@ -1,73 +1,137 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import * as bcrypt from 'bcrypt';
+import * as nodemailer from 'nodemailer';
+import { JwtService } from '@nestjs/jwt';
 import { Repository } from 'typeorm';
 import { Customer } from './customer.entity';
 import { ShopifyService } from './shopify.service';
-import { Address } from './address.entity';
 import { getCoordinatesFromAddress } from 'src/utils/geoUtils';
+import { BusinessDetails } from '../business-details/business-details.entity';
+import { UpdateRoleDto } from './update-role.dto';
 
 @Injectable()
 export class CustomerService {
   constructor(
     @InjectRepository(Customer)
     private readonly customerRepository: Repository<Customer>,
-
-    @InjectRepository(Address)
-    private readonly addressRepository: Repository<Address>,
-
+    @InjectRepository(BusinessDetails)
+    private readonly businessDetailsRepository: Repository<BusinessDetails>,
     private readonly shopifyService: ShopifyService,
+    private readonly jwtService: JwtService,
   ) {}
 
-  async handleAddresses(customer: any, savedCustomer: Customer): Promise<void> {
-    for (const address of customer.addresses || []) {
-      const fullAddress = `${address.address1}, ${address.address2 || ''}, ${address.city}, ${address.country}`;
-      try {
-        const { lat, lng } = await getCoordinatesFromAddress(fullAddress);
+  // async handleAddresses(customer: any, savedCustomer: Customer): Promise<void> {
+  //   for (const address of customer.addresses || []) {
+  //     const fullAddress = `${address.address1}, ${address.address2 || ''}, ${address.city}, ${address.country}`;
+  //     try {
+  //       const { lat, lng } = await getCoordinatesFromAddress(fullAddress);
 
-        const newAddress = this.addressRepository.create({
-          customerId: `${savedCustomer.customerId}`,
-          addressId: address.id,
-          address1: address.address1,
-          address2: address.address2 || null,
-          city: address.city,
-          province: address.province || null,
-          country: address.country,
-          zip: address.zip,
-          phone: address.phone || null,
-          name: address.name || null,
-          default: address.default || false,
-          latitude: lat,
-          longitude: lng,
-          customer: savedCustomer,
-        });
+  //       const newAddress = this.addressRepository.create({
+  //         customerId: `${savedCustomer.customerId}`,
+  //         addressId: address.id,
+  //         address1: address.address1,
+  //         address2: address.address2 || null,
+  //         city: address.city,
+  //         province: address.province || null,
+  //         country: address.country,
+  //         zip: address.zip,
+  //         phone: address.phone || null,
+  //         name: address.name || null,
+  //         default: address.default || false,
+  //         latitude: lat,
+  //         longitude: lng,
+  //         customer: savedCustomer,
+  //       });
 
-        await this.addressRepository.save(newAddress);
-      } catch (error) {
-        console.error(
-          `Error fetching or saving address for customer ${customer.id}:`,
-          error,
-        );
-      }
-    }
+  //       await this.addressRepository.save(newAddress);
+  //     } catch (error) {
+  //       console.error(
+  //         `Error fetching or saving address for customer ${customer.id}:`,
+  //         error,
+  //       );
+  //     }
+  //   }
+  // }
+
+  async sendEmail(
+    firstName: string,
+    email: string,
+    password: string,
+  ): Promise<void> {
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASSWORD,
+      },
+    });
+
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: 'Hi Welcome! Your account password',
+      text: `Hi ${firstName},\n\nWelcome to LightHeart! Your password is: ${password}. Please sign in and complete your profile`,
+    });
   }
 
-  async getCustomerById(id: string): Promise<Customer | null> {
-    const numericId = parseInt(id, 10);
+  async getCustomerById(id: string): Promise<{
+    message: string;
+    customer?: Customer;
+    businessDetails?: object;
+  }> {
+    const customer = await this.customerRepository.findOne({
+      where: { customerId: id },
+    });
 
-    if (isNaN(numericId)) {
-      throw new Error('Invalid ID format');
+    if (!customer) {
+      return {
+        message: `Customer with ID ${id} not found.`,
+      };
     }
 
-    const customer = await this.customerRepository.findOne({
-      where: { id: numericId },
+    const businessDetails = await this.businessDetailsRepository.findOne({
+      where: { customerId: id },
     });
-    return customer || null;
+
+    return {
+      message: 'Customer retrieved successfully.',
+      customer,
+      businessDetails: businessDetails || {},
+    };
+  }
+
+  async getAllCustomers(
+    page: number,
+    limit: number,
+  ): Promise<{
+    message: string;
+    customers: Customer[];
+    pagination: { total: number; page: number; limit: number };
+  }> {
+    const [customers, totalCount] = await this.customerRepository.findAndCount({
+      take: limit,
+      skip: (page - 1) * limit,
+    });
+
+    return {
+      message: 'Customers retrieved successfully.',
+      customers,
+      pagination: {
+        total: totalCount,
+        page,
+        limit,
+      },
+    };
   }
 
   async saveCustomersOnce(): Promise<void> {
     const roles = ['educator', 'partner', 'lashArtist', 'student', 'lightHQ'];
     const customers = await this.shopifyService.getCustomersFromShopify();
-
     for (const customer of customers) {
       try {
         const existingCustomer = await this.customerRepository.findOne({
@@ -75,44 +139,90 @@ export class CustomerService {
         });
 
         if (!existingCustomer) {
-          const createdAt = customer.createdAt
-            ? new Date(customer.createdAt)
-            : null;
-          const validCreatedAt =
-            createdAt && !isNaN(createdAt.getTime()) ? createdAt : null;
+          const rawPassword = Math.random().toString(36).slice(-8);
+          const hashedPassword = await bcrypt.hash(rawPassword, 10);
 
           const newCustomer = this.customerRepository.create({
             customerId: `${customer.id}`,
-            email: customer.email || null,
-            createdAt: validCreatedAt,
-            updatedAt: new Date(),
+            email: customer.email,
+            createdAt: customer.createdAt || null,
             firstName: customer.firstName || null,
             lastName: customer.lastName || null,
-            ordersCount: `${customer.ordersCount || 0}`,
-            state: customer.state || null,
-            totalSpent: customer.totalSpent || 0,
-            lastOrderId: customer.lastOrderId || null,
-            note: customer.note || null,
-            verifiedEmail: customer.verifiedEmail || false,
             phone: customer.phone || null,
+            password: hashedPassword,
             role: roles[Math.floor(Math.random() * roles.length)],
           });
 
-          const savedCustomer = await this.customerRepository.save(newCustomer);
-          if (customer.addresses?.length > 0) {
-            await this.handleAddresses(customer, savedCustomer);
-          }
-        } else {
-          console.error(
-            `Customer with ID ${customer.id} already exists, skipping.`,
+          await this.customerRepository.save(newCustomer);
+          await this.sendEmail(
+            newCustomer.firstName,
+            'zaid.wixpatriots@gmail.com',
+            rawPassword,
           );
         }
       } catch (error) {
         console.error(`Error processing customer ${customer.id}:`, error);
-        // Continue to the next customer without breaking the process
         continue;
       }
     }
+  }
+
+  async login(email: string, password: string): Promise<any> {
+    const user = await this.customerRepository.findOne({ where: { email } });
+
+    if (!user) {
+      throw new Error('Invalid credentials');
+    }
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      throw new Error('Invalid credentials');
+    }
+    const token = this.jwtService.sign({ userId: user.id });
+    return { message: 'Login successful', token, user };
+  }
+
+  async updateCustomerRole(
+    id: string,
+    updateRoleDto: UpdateRoleDto,
+  ): Promise<{ message: string; customer?: Customer }> {
+    const customer = await this.customerRepository.findOne({
+      where: { customerId: id },
+    });
+
+    if (!customer) {
+      throw new NotFoundException(`Customer with ID ${id} not found.`);
+    }
+
+    customer.role = updateRoleDto.role;
+    await this.customerRepository.save(customer);
+
+    return {
+      message: `Customer's role updated successfully.`,
+      customer,
+    };
+  }
+
+  private haversine(
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number,
+  ): number {
+    const R = 6371; // Radius of Earth in km
+    const dLat = this.degreesToRadians(lat2 - lat1);
+    const dLon = this.degreesToRadians(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(this.degreesToRadians(lat1)) *
+        Math.cos(this.degreesToRadians(lat2)) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c; // Distance in kilometers
+  }
+
+  private degreesToRadians(degrees: number): number {
+    return degrees * (Math.PI / 180);
   }
 
   async findNearbyCustomers(
@@ -124,55 +234,65 @@ export class CustomerService {
     roles: string[],
   ): Promise<{
     message: string;
-    customers: { customer: Customer; addresses: Address[] }[];
+    customers: { customer: Customer; businessProfile: {} }[];
     pagination: {
       total: number;
       page: number;
       limit: number;
     };
   }> {
-    // Calculate lat/lng boundaries (bounding box)
-    const latChange = radius / 111.32;
-    const lonChange = radius / (111.32 * Math.cos((lat * Math.PI) / 180));
+    // Fetch customers and their business details
+    const customers = await this.customerRepository.find();
 
-    const minLat = lat - latChange;
-    const maxLat = lat + latChange;
-    const minLng = lng - lonChange;
-    const maxLng = lng + lonChange;
+    // Filter customers whose business details fall within the radius
+    const nearbyCustomers = await Promise.all(
+      customers.map(async (customer) => {
+        const businessProfile = await this.businessDetailsRepository.findOne({
+          where: { customerId: customer.customerId }, // Using customerId to get business details
+        });
 
-    // Create query to find customers with their addresses in the specified bounding box
-    let query = this.customerRepository
-      .createQueryBuilder('customer')
-      .leftJoinAndSelect('customer.addresses', 'address')
-      .where('address.latitude BETWEEN :minLat AND :maxLat', { minLat, maxLat })
-      .andWhere('address.longitude BETWEEN :minLng AND :maxLng', {
-        minLng,
-        maxLng,
-      });
+        if (businessProfile) {
+          const distance = this.haversine(
+            lat,
+            lng,
+            businessProfile.latitude,
+            businessProfile.longitude,
+          );
 
-    // Apply role-based filtering if roles are provided
-    if (roles.length > 0) {
-      query = query.andWhere('customer.role IN (:...roles)', { roles });
-    }
+          if (distance <= radius) {
+            return {
+              customer,
+              businessProfile,
+            };
+          }
+        }
 
-    // Apply pagination
-    const [customers, total] = await query
-      .skip((page - 1) * limit)
-      .take(limit)
-      .getManyAndCount();
+        return null; // Return null if not within radius
+      }),
+    );
 
-    if (customers.length === 0) {
+    // Filter out null results (customers not within radius)
+    const filteredCustomers = nearbyCustomers.filter(
+      (customer) => customer !== null,
+    );
+
+    if (filteredCustomers.length === 0) {
       throw new NotFoundException(
         'No customers found within the specified radius.',
       );
     }
 
+    const total = filteredCustomers.length;
+
+    // Apply pagination
+    const paginatedCustomers = filteredCustomers.slice(
+      (page - 1) * limit,
+      page * limit,
+    );
+
     return {
       message: 'Nearby customers retrieved successfully.',
-      customers: customers.map((customer) => ({
-        customer,
-        addresses: customer.addresses,
-      })),
+      customers: paginatedCustomers,
       pagination: {
         total,
         page,
