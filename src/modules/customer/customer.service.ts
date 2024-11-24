@@ -79,6 +79,31 @@ export class CustomerService {
     });
   }
 
+  private async sendResetEmail(email: string, token: string): Promise<void> {
+    const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASSWORD,
+      },
+    });
+
+    await transporter.sendMail({
+      from: '"Light Heart Map" <no-reply@lightheartmap.com>',
+      to: email,
+      subject: 'Password Reset Request',
+      html: `
+        <p>You requested a password reset. Click the link below to reset your password:</p>
+        <p><a href="${resetUrl}" style="color: blue; text-decoration: underline;" target="_blank">Reset Password</a></p>
+        <p>If the above link doesn't work, copy and paste the following URL into your browser:</p>
+        <p>${resetUrl}</p>
+        <p>If you did not request this, please ignore this email.</p>
+      `,
+    });
+  }
+
   async getCustomerById(id: string): Promise<{
     message: string;
     customer?: Customer;
@@ -179,6 +204,53 @@ export class CustomerService {
     }
     const token = this.jwtService.sign({ userId: user.id });
     return { message: 'Login successful', token, user };
+  }
+
+  async forgotPassword(email: string): Promise<{ message: string }> {
+    const customer = await this.customerRepository.findOne({
+      where: { email },
+    });
+
+    if (!customer) {
+      throw new NotFoundException('No account found with that email.');
+    }
+
+    const token = this.jwtService.sign(
+      { customerId: customer.id },
+      { secret: process.env.JWT_SECRET, expiresIn: '1h' },
+    );
+
+    await this.sendResetEmail(customer.email, token);
+
+    return { message: 'Password reset link has been sent to your email.' };
+  }
+
+  async resetPassword(
+    token: string,
+    newPassword: string,
+  ): Promise<{ message: string }> {
+    try {
+      const { customerId } = this.jwtService.verify(token, {
+        secret: process.env.JWT_SECRET,
+      });
+
+      const customer = await this.customerRepository.findOne({
+        where: { id: customerId },
+      });
+
+      if (!customer) {
+        throw new NotFoundException('Customer not found.');
+      }
+
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+      customer.password = hashedPassword;
+      await this.customerRepository.save(customer);
+
+      return { message: 'Password reset successfully.' };
+    } catch (err) {
+      throw new BadRequestException('Invalid or expired token.');
+    }
   }
 
   async updateCustomerRole(

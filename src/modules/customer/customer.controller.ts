@@ -60,6 +60,21 @@ export class CustomerController {
     }
   }
 
+  @Post('forgot-password')
+  async forgotPassword(
+    @Body() { email }: { email: string },
+  ): Promise<{ message: string }> {
+    return this.customerService.forgotPassword(email);
+  }
+
+  @Post('reset-password')
+  async resetPassword(
+    @Body('token') token: string,
+    @Body('newPassword') newPassword: string,
+  ): Promise<{ message: string }> {
+    return this.customerService.resetPassword(token, newPassword);
+  }
+
   @Post('nearby')
   async getNearbyCustomers(
     @Body('lat') lat: string,
