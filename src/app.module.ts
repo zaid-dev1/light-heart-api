@@ -15,6 +15,7 @@ import { CustomerModule } from './modules/customer/customer.module';
 import { WebhookModule } from './modules/webhooks/webhook.module';
 import { AuthMiddleware } from './auth/auth/auth.middleware';
 import { BusinessDetailsModule } from './modules/business-details/business-details.module';
+import { HeadQuarterModule } from './modules/head-quaters/head-quaters.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { BusinessDetailsModule } from './modules/business-details/business-detai
     CustomerModule,
     WebhookModule,
     BusinessDetailsModule,
+    HeadQuarterModule,
   ],
   controllers: [AppController],
   providers: [AppService],
