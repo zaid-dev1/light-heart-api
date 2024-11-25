@@ -1,15 +1,23 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Customer } from '../customer/customer.entity';
 import * as crypto from 'crypto';
+import * as bcrypt from 'bcrypt';
 import { getCoordinatesFromAddress } from 'src/utils/geoUtils';
+import { BusinessDetails } from '../business-details/business-details.entity';
 
 @Injectable()
 export class WebhookService {
   constructor(
     @InjectRepository(Customer)
     private readonly customerRepository: Repository<Customer>,
+    @InjectRepository(BusinessDetails)
+    private readonly businessDetailsRepository: Repository<BusinessDetails>,
   ) {}
 
   verifyWebhook(hmac: string, rawBody: string): boolean {
@@ -88,89 +96,90 @@ export class WebhookService {
   //   }
   // }
 
-  // async handleCustomerDeletion(
-  //   payload: any,
-  // ): Promise<{ message: string; id: string }> {
-  //   const customerId = payload.id;
+  async handleCustomerDeletion(
+    payload: any,
+  ): Promise<{ message: string; id: string }> {
+    const customerId = payload.id;
+    const customer = await this.customerRepository.findOne({
+      where: { customerId: `${customerId}` },
+    });
 
-  //   const customer = await this.customerRepository.findOne({
-  //     where: { customerId: `${customerId}` },
-  //     relations: ['addresses'],
-  //   });
+    if (customer) {
+      const businessDetails = await this.businessDetailsRepository.findOne({
+        where: { customerId: `${customerId}` },
+      });
 
-  //   if (customer) {
-  //     await this.addressRepository.remove(customer.addresses);
-  //     await this.customerRepository.remove(customer);
+      if (businessDetails) {
+        await this.businessDetailsRepository.delete(businessDetails.id);
+      }
 
-  //     return {
-  //       message:
-  //         'Customer and associated addresses have been deleted successfully.',
-  //       id: customer.customerId,
-  //     };
-  //   } else {
-  //     return {
-  //       message: `Customer with ID ${customerId} not found.`,
-  //       id: customerId,
-  //     };
-  //   }
-  // }
+      await this.customerRepository.remove(customer);
 
-  // async handleCustomerCreation(payload: any): Promise<void> {
-  //   const customer = payload;
-  //   const roles = ['educator', 'partner', 'lashArtist', 'student', 'lightHQ'];
-  //   const newCustomer = this.customerRepository.create({
-  //     customerId: `${customer.id}`,
-  //     email: customer.email,
-  //     createdAt: new Date(customer.created_at),
-  //     updatedAt: new Date(customer.updated_at),
-  //     firstName: customer.first_name,
-  //     lastName: customer.last_name || null,
-  //     ordersCount: `${customer.orders_count}`,
-  //     state: customer.state,
-  //     totalSpent: customer.total_spent,
-  //     lastOrderId: customer.last_order_id || null,
-  //     note: customer.note,
-  //     verifiedEmail: customer.verified_email,
-  //     phone: customer.phone,
-  //     role: roles[Math.floor(Math.random() * roles.length)],
-  //   });
-  //   await this.customerRepository.save(newCustomer);
-  // }
+      return {
+        message:
+          'Customer and associated business details have been deleted successfully.',
+        id: customer.customerId,
+      };
+    } else {
+      return {
+        message: `Customer with ID ${customerId} not found.`,
+        id: customerId,
+      };
+    }
+  }
 
-  // async handleCustomerUpdate(payload: any): Promise<void> {
-  //   const customer = payload;
-  //   const existingCustomer = await this.customerRepository.findOne({
-  //     where: { customerId: `${customer.id}` },
-  //     relations: ['addresses'],
-  //   });
+  async handleCustomerCreation(payload: any): Promise<void> {
+    const rawPassword = Math.random().toString(36).slice(-8);
+    const hashedPassword = await bcrypt.hash(rawPassword, 10);
 
-  //   if (!existingCustomer) {
-  //     throw new Error(`Customer with ID ${customer.id} not found.`);
-  //   }
+    const customer = payload;
+    const roles = ['educator', 'partner', 'lashArtist', 'student'];
+    const newCustomer = this.customerRepository.create({
+      customerId: `${customer.id}`,
+      email: customer.email,
+      createdAt: customer.createdAt || null,
+      firstName: customer.first_name,
+      lastName: customer.last_name || null,
+      phone: customer.phone || null,
+      password: hashedPassword,
+      role: roles[Math.floor(Math.random() * roles.length)],
+    });
+    await this.customerRepository.save(newCustomer);
+  }
 
-  //   Object.assign(existingCustomer, {
-  //     email: customer.email,
-  //     updatedAt: new Date(customer.updated_at),
-  //     firstName: customer.first_name,
-  //     lastName: customer.last_name || null,
-  //     ordersCount: `${customer.orders_count}`,
-  //     state: customer.state,
-  //     totalSpent: customer.total_spent,
-  //     lastOrderId: customer.last_order_id || null,
-  //     note: customer.note,
-  //     verifiedEmail: customer.verified_email,
-  //     phone: customer.phone,
-  //   });
+  async handleCustomerUpdate(
+    payload: any,
+  ): Promise<{ message: string; id: string }> {
+    const customer = payload;
 
-  //   const updatedCustomer =
-  //     await this.customerRepository.save(existingCustomer);
-  //   if (customer.addresses?.length > 0) {
-  //     await this.handleCustomerAddresses(customer.addresses, updatedCustomer);
-  //   } else if (customer?.addresses?.length === 0 && customer.default_address) {
-  //     await this.handleCustomerAddresses(
-  //       [customer.default_address],
-  //       updatedCustomer,
-  //     );
-  //   }
-  // }
+    const existingCustomer = await this.customerRepository.findOne({
+      where: { customerId: `${customer.id}` },
+    });
+
+    if (!existingCustomer) {
+      throw new NotFoundException(`Customer with ID ${customer.id} not found.`);
+    }
+
+    Object.assign(existingCustomer, {
+      email: customer.email,
+      createdAt: customer.created_at
+        ? new Date(customer.created_at)
+        : existingCustomer.createdAt,
+      firstName: customer.first_name,
+      lastName: customer.last_name || null,
+      phone: customer.phone || existingCustomer.phone,
+    });
+
+    try {
+      await this.customerRepository.save(existingCustomer);
+      return {
+        message: 'Customer updated successfully.',
+        id: existingCustomer.customerId,
+      };
+    } catch (error) {
+      throw new InternalServerErrorException(
+        `Failed to update customer: ${error.message}`,
+      );
+    }
+  }
 }

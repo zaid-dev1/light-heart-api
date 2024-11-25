@@ -155,7 +155,7 @@ export class CustomerService {
   }
 
   async saveCustomersOnce(): Promise<void> {
-    const roles = ['educator', 'partner', 'lashArtist', 'student', 'lightHQ'];
+    const roles = ['educator', 'partner', 'lashArtist', 'student'];
     const customers = await this.shopifyService.getCustomersFromShopify();
     for (const customer of customers) {
       try {
