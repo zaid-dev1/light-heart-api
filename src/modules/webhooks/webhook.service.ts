@@ -7,6 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Customer } from '../customer/customer.entity';
 import * as crypto from 'crypto';
+import * as nodemailer from 'nodemailer';
 import * as bcrypt from 'bcrypt';
 import { getCoordinatesFromAddress } from 'src/utils/geoUtils';
 import { BusinessDetails } from '../business-details/business-details.entity';
@@ -39,6 +40,28 @@ export class WebhookService {
       return false;
     }
   }
+
+  async sendEmail(
+    firstName: string,
+    email: string,
+    password: string,
+  ): Promise<void> {
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASSWORD,
+      },
+    });
+
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: 'Hi Welcome! Your account password',
+      text: `Hi ${firstName},\n\nWelcome to LightHeart! Your password is: ${password}. Please sign in and complete your profile`,
+    });
+  }
+
   // private async handleCustomerAddresses(
   //   addresses: any[],
   //   savedCustomer: any,
@@ -145,6 +168,11 @@ export class WebhookService {
       role: roles[Math.floor(Math.random() * roles.length)],
     });
     await this.customerRepository.save(newCustomer);
+    await this.sendEmail(
+      newCustomer.firstName,
+      'zaid.wixpatriots@gmail.com',
+      rawPassword,
+    );
   }
 
   async handleCustomerUpdate(
