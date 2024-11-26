@@ -26,6 +26,10 @@ export class CreateBusinessDetailsDto {
   courses?: string;
 
   @IsOptional()
+  @IsString()
+  services?: string;
+
+  @IsOptional()
   @IsNumber()
   latitude?: number;
 

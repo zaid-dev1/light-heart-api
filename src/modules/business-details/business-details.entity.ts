@@ -30,6 +30,9 @@ export class BusinessDetails {
   @Column({ type: 'text', nullable: true })
   courses: string;
 
+  @Column({ type: 'text', nullable: true })
+  services: string;
+
   @Column({ type: 'decimal', precision: 10, scale: 8, nullable: true })
   latitude: number;
 
