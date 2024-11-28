@@ -7,7 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
 import * as nodemailer from 'nodemailer';
 import { JwtService } from '@nestjs/jwt';
-import { Repository } from 'typeorm';
+import { Not, Repository } from 'typeorm';
 import { Customer } from './customer.entity';
 import { ShopifyService } from './shopify.service';
 import { getCoordinatesFromAddress } from 'src/utils/geoUtils';
@@ -139,6 +139,7 @@ export class CustomerService {
     pagination: { total: number; page: number; limit: number };
   }> {
     const [customers, totalCount] = await this.customerRepository.findAndCount({
+      where: { role: Not('admin') },
       take: limit,
       skip: (page - 1) * limit,
     });
