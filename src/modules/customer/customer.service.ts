@@ -340,18 +340,23 @@ export class CustomerService {
           }
         }
 
-        return null; // Return null if not within radius
+        return null;
       }),
     );
 
-    // Filter out null results (customers not within radius)
-    const filteredCustomers = nearbyCustomers.filter(
+    let filteredCustomers = nearbyCustomers.filter(
       (customer) => customer !== null,
     );
 
+    if (roles.length > 0) {
+      filteredCustomers = filteredCustomers.filter((entry) =>
+        roles.includes(entry.customer.role),
+      );
+    }
+
     if (filteredCustomers.length === 0) {
       throw new NotFoundException(
-        'No customers found within the specified radius.',
+        'No customers found within the specified radius and roles.',
       );
     }
 
