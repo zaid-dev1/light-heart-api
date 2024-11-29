@@ -122,7 +122,7 @@ export class ShopifyService {
         this.shopifyBaseUrl,
         {
           query: `query {
-            customers(first: 5) {
+            customers(first: 25) {
               edges {
                 node {
                   id
