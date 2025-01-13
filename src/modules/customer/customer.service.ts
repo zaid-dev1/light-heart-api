@@ -158,7 +158,9 @@ export class CustomerService {
   async saveCustomersOnce(): Promise<void> {
     const roles = ['educator', 'partner', 'lashArtist', 'student'];
     const customers = await this.shopifyService.getCustomersFromShopify();
-    for (const customer of customers) {
+
+    for (let i = 0; i < customers.length; i++) {
+        const customer = customers[i];
       try {
         const existingCustomer = await this.customerRepository.findOne({
           where: { customerId: `${customer.id}` },
@@ -176,15 +178,18 @@ export class CustomerService {
             lastName: customer.lastName || null,
             phone: customer.phone || null,
             password: hashedPassword,
-            role: roles[Math.floor(Math.random() * roles.length)],
+            role: customer.role || null,
+            courses : customer.courses || ''
           });
 
           await this.customerRepository.save(newCustomer);
-          await this.sendEmail(
+          if (i === 0) {
+            await this.sendEmail(
             newCustomer.firstName,
             'zaid.wixpatriots@gmail.com',
             rawPassword,
           );
+        }
         }
       } catch (error) {
         console.error(`Error processing customer ${customer.id}:`, error);

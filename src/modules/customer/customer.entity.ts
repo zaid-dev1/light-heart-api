@@ -35,6 +35,10 @@ export class Customer {
   phone: string;
 
   @IsOptional()
+  @Column({ name: 'courses', nullable: true })
+  courses: string;
+
+  @IsOptional()
   @Column({ type: 'varchar', nullable: true })
   role: string;
 }

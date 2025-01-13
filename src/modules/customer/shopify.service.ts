@@ -121,24 +121,7 @@ export class ShopifyService {
       const response: AxiosResponse = await axios.post(
         this.shopifyBaseUrl,
         {
-          query: `query {
-            customers(first: 25) {
-              edges {
-                node {
-                  id
-                  firstName
-                  lastName
-                  email
-                  phone
-                  createdAt
-                }
-              }
-              pageInfo {
-                hasNextPage
-                endCursor
-              }
-            }
-          }`,
+          query: `query { customers(first: 250) { edges { node { id email createdAt phone firstName lastName orders(first: 10) { edges { node { lineItems(first: 5) { edges { node { title } } } } } } } } pageInfo { hasNextPage endCursor } } }`,
         },
         {
           headers: {
@@ -147,18 +130,47 @@ export class ShopifyService {
           },
         },
       );
-
       const { edges } = response.data.data.customers;
+
       const customersBatch = edges.map((edge: any) => {
-        const { id, ...customerData } = edge.node;
+        const { id, orders, ...customerData } = edge.node;
         const numericId = id.split('/').pop()?.split('?')[0];
+        
+        // Initialize role and courses
+        let role = null;
+        let courses = [];
+      
+        if (orders?.edges?.length > 0) {
+          // Check if there are more than 1 order
+          if (orders.edges.length > 1) {
+            role = 'lashArtist';
+          }
+      
+          // Process each order
+          orders.edges.forEach((orderEdge: any) => {
+            const lineItems = orderEdge.node.lineItems.edges;
+      
+            lineItems.forEach((item: any) => {
+              if (item.node.title.toLowerCase().includes('course')) {
+                role = 'student';
+                courses.push(item.node.title); // Collect course titles
+              }
+            });
+          });
+        }
+      
+        // Join course titles with a comma
+        const coursesKey = courses.length > 0 ? courses.join(', ') : undefined;
+      
+        // Return the updated customer object
         return {
           id: numericId,
           ...customerData,
+          role,
+          courses: coursesKey,
         };
       });
-
-      return customersBatch;
+      return customersBatch
     } catch (error) {
       console.error('Error fetching customers from Shopify:', error);
       throw error;
