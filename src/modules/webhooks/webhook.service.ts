@@ -156,7 +156,6 @@ export class WebhookService {
     const hashedPassword = await bcrypt.hash(rawPassword, 10);
 
     const customer = payload;
-    const roles = ['educator', 'partner', 'lashArtist', 'student'];
     const newCustomer = this.customerRepository.create({
       customerId: `${customer.id}`,
       email: customer.email,
@@ -165,12 +164,12 @@ export class WebhookService {
       lastName: customer.last_name || null,
       phone: customer.phone || null,
       password: hashedPassword,
-      role: roles[Math.floor(Math.random() * roles.length)],
+      role: 'lashArtist',
     });
     await this.customerRepository.save(newCustomer);
     await this.sendEmail(
       newCustomer.firstName,
-      'zaid.wixpatriots@gmail.com',
+      newCustomer.email,
       rawPassword,
     );
   }
