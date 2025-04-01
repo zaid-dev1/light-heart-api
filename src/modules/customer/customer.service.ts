@@ -7,12 +7,64 @@ import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
 import * as nodemailer from 'nodemailer';
 import { JwtService } from '@nestjs/jwt';
-import { IsNull, Not, Repository } from 'typeorm';
+import { In, IsNull, Not, Repository } from 'typeorm';
 import { Customer } from './customer.entity';
 import { ShopifyService } from './shopify.service';
 import { getCoordinatesFromAddress } from 'src/utils/geoUtils';
 import { BusinessDetails } from '../business-details/business-details.entity';
 import { UpdateRoleDto } from './update-role.dto';
+
+export async function sendEmail(
+  firstName: string,
+  email: string,
+  password: string,
+): Promise<void> {
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASSWORD,
+    },
+  });
+
+  await transporter.sendMail({
+    from: process.env.EMAIL_USER,
+    to: email,
+    subject: 'Create Your Listing on the Light Heart Artist Map!',
+    text: `Hi ${firstName},
+  
+  We would love to display your business on the newly improved Light Heart Artist Map. This is a free marketing tool that we have developed for our customers and students to help clients find talented artists in their area.
+  
+  *Follow These Steps To Create Your New Listing:*
+  1. Use the following information to log in to your new account:
+  
+     Your Email: ${email}  
+     Your Temporary Password: ${password}
+  
+  2. Click or tap on the menu in the top left and go to *My Profile*  
+  3. Click or tap *Edit Profile* to add your business information and get displayed on our map.  
+  
+  Log in and add your business here: ${process.env.FRONTEND_URL}
+  
+  The map will automatically add any Light Heart courses you take to your profile.
+  
+  If you ever need to update your business information, just go to the "Find An Artist" page on our website and log in to update your info.
+  `,
+    html: `<p>Hi ${firstName},</p>
+           <p>We would love to display your business on the newly improved <strong>Light Heart Artist Map</strong>. This is a free marketing tool that we have developed for our customers and students to help clients find talented artists in their area.</p>
+           <p><strong>Follow These Steps To Create Your New Listing:</strong></p>
+
+             <p><strong>1.</strong> Use the following information to log in to your new account:</p>
+             <p><strong>Your Email:</strong> ${email}</p>
+             <p><strong>Your Temporary Password:</strong> ${password}</p>
+             <p> <strong>2.</strong>  Click or tap on the menu in the top left and go to <strong>My Profile</strong></p>
+             <p> <strong>3.</strong> Click or tap <strong>Edit Profile</strong> to add your business information and get displayed on our map.</p>
+
+           <p><a href="${process.env.FRONTEND_URL}" target="_blank"><strong>Log in and add your business Here!</strong></a></p>
+           <p>The map will automatically add any Light Heart courses you take to your profile.</p>
+           <p>If you ever need to update your business information, just go to the <strong>"Find An Artist"</strong> page on our website and log in to update your info.</p>`,
+  });
+}
 
 @Injectable()
 export class CustomerService {
@@ -57,27 +109,6 @@ export class CustomerService {
   //     }
   //   }
   // }
-
-  async sendEmail(
-    firstName: string,
-    email: string,
-    password: string,
-  ): Promise<void> {
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASSWORD,
-      },
-    });
-
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: email,
-      subject: 'Hi Welcome! Your account password',
-      text: `Hi ${firstName},\n\nWelcome to LightHeart! Your password is: ${password}. Please sign in and complete your profile`,
-    });
-  }
 
   private async sendResetEmail(email: string, token: string): Promise<void> {
     const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
@@ -139,10 +170,7 @@ export class CustomerService {
     pagination: { total: number; page: number; limit: number };
   }> {
     const [customers, totalCount] = await this.customerRepository.findAndCount({
-      where: [
-        { role: Not('admin') },
-        { role: IsNull() },
-      ],
+      where: [{ role: Not('admin') }, { role: IsNull() }],
       take: limit,
       skip: (page - 1) * limit,
       order: {
@@ -162,17 +190,47 @@ export class CustomerService {
   }
 
   async saveCustomersOnce(): Promise<void> {
-    const roles = ['educator', 'partner', 'lashArtist', 'student'];
+
+    //Send static email for testing
+    // const rawPassword = Math.random().toString(36).slice(-8);
+    //       const hashedPassword = await bcrypt.hash(rawPassword, 10);
+
+    //       const newCustomer = this.customerRepository.create({
+    //         customerId: '90988772263636631',
+    //         email: "elliottmmorris@gmail.com",
+    //         createdAt:  new Date(),
+    //         firstName: 'Elliot',
+    //         lastName: "Morris" ,
+    //         phone: "7283733788229",
+    //         password: hashedPassword,
+    //         role: 'admin',
+    //         courses: '',
+    //       });
+    //       console.log("+++", rawPassword)
+    //       await this.customerRepository.save(newCustomer);
+          
+    //           await sendEmail(
+    //             newCustomer.firstName,
+    //             newCustomer.email,
+    //             rawPassword,
+    //           )
+
     const customers = await this.shopifyService.getCustomersFromShopify();
+    const customerIds = customers.map((c) => `${c.id}`);
 
-    for (let i = 0; i < customers.length; i++) {
-        const customer = customers[i];
-      try {
-        const existingCustomer = await this.customerRepository.findOne({
-          where: { customerId: `${customer.id}` },
-        });
+    const existingCustomers = await this.customerRepository.find({
+      where: { customerId: In(customerIds) },
+      select: ['customerId'],
+    });
 
-        if (!existingCustomer) {
+    const existingCustomerIds = new Set(
+      existingCustomers.map((c) => c.customerId),
+    );
+    const failedCustomers = [];
+
+    for (const customer of customers) {
+      if (!existingCustomerIds.has(`${customer.id}`)) {
+        try {
           const rawPassword = Math.random().toString(36).slice(-8);
           const hashedPassword = await bcrypt.hash(rawPassword, 10);
 
@@ -185,21 +243,34 @@ export class CustomerService {
             phone: customer.phone || null,
             password: hashedPassword,
             role: customer.role || null,
-            courses : customer.courses || ''
+            courses: customer.courses || '',
           });
-
           await this.customerRepository.save(newCustomer);
+          
 
-          //   await this.sendEmail(
-          //   newCustomer.firstName,
-          //   newCustomer.email,
-          //   rawPassword,
-          // );
+          if (customer.email) {
+              await sendEmail(
+                newCustomer.firstName,
+                newCustomer.email,
+                rawPassword,
+              )
+          }
+        } catch (error) {
+          console.error(`Error processing customer ${customer.id}:`, error);
+          failedCustomers.push({
+            customerId: customer.id,
+            reason: 'Insertion failed',
+          });
         }
-      } catch (error) {
-        console.error(`Error processing customer ${customer.id}:`, error);
-        continue;
       }
+    }
+
+
+    if (failedCustomers.length > 0) {
+      console.warn(
+        `Failed to process ${failedCustomers.length} customers.`,
+        failedCustomers,
+      );
     }
   }
 
