@@ -215,8 +215,10 @@ export class CustomerService {
     //             rawPassword,
     //           )
 
+    console.log("script started")
     const customers = await this.shopifyService.getCustomersFromShopify();
     const customerIds = customers.map((c) => `${c.id}`);
+    console.log("users fetched form shopify", customerIds.length)
 
     const existingCustomers = await this.customerRepository.find({
       where: { customerId: In(customerIds) },
@@ -246,6 +248,8 @@ export class CustomerService {
             courses: customer.courses || '',
           });
           await this.customerRepository.save(newCustomer);
+
+          console.log("user created", newCustomer, rawPassword)
           
 
           if (customer.email) {
@@ -255,6 +259,7 @@ export class CustomerService {
                 rawPassword,
               )
           }
+          console.log("email sent")
         } catch (error) {
           console.error(`Error processing customer ${customer.id}:`, error);
           failedCustomers.push({
@@ -265,8 +270,11 @@ export class CustomerService {
       }
     }
 
+    console.log("customers loop done")
+
 
     if (failedCustomers.length > 0) {
+      console.log("customer failed", failedCustomers.length)
       console.warn(
         `Failed to process ${failedCustomers.length} customers.`,
         failedCustomers,
