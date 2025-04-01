@@ -13,7 +13,9 @@ interface FailedCustomer {
 
 async function saveCustomersOnce(): Promise<void> {
   try {
+    console.log("script running")
     await initializeDatabaseConnection();
+    console.log("DATABASE CONNECTED")
 
     const customerRepository = dataSource.getRepository(Customer);
     const shopifyService = new ShopifyService();
