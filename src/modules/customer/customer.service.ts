@@ -246,6 +246,7 @@ export class CustomerService {
             password: hashedPassword,
             role: customer.role || null,
             courses: customer.courses || '',
+            email_sent: false,
           });
           await this.customerRepository.save(newCustomer);
 
@@ -253,13 +254,15 @@ export class CustomerService {
           
 
           if (customer.email) {
-              await sendEmail(
+            await sendEmail(
                 newCustomer.firstName,
                 newCustomer.email,
                 rawPassword,
               )
-          }
-          console.log("email sent")
+
+            await this.customerRepository.update(newCustomer.id, { email_sent: true });
+            console.log("email sent")
+        }
         } catch (error) {
           console.error(`Error processing customer ${customer.id}:`, error);
           failedCustomers.push({

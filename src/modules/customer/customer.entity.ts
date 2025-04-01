@@ -41,4 +41,8 @@ export class Customer {
   @IsOptional()
   @Column({ type: 'varchar', nullable: true })
   role: string;
+
+  @IsOptional()
+  @Column({ type: 'boolean', nullable: true })
+  email_sent: boolean;
 }
