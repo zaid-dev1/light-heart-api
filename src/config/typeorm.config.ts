@@ -12,6 +12,9 @@ export const typeOrmConfig: DataSourceOptions = {
   database: process.env.DB_NAME,
   entities: [__dirname + '/../**/*.entity.{ts,js}'],
   synchronize: process.env.NODE_ENV === 'development',
+  ssl: {
+    rejectUnauthorized: false,
+  },
 };
 
 // Create a new DataSource instance

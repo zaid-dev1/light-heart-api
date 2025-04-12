@@ -13,6 +13,8 @@ import { ShopifyService } from './shopify.service';
 import { getCoordinatesFromAddress } from 'src/utils/geoUtils';
 import { BusinessDetails } from '../business-details/business-details.entity';
 import { UpdateRoleDto } from './update-role.dto';
+import { LightHeartInviteEmail } from 'src/utils/inviteLink';
+import { sendEmailBySendgrid } from 'src/utils/sendEmail';
 
 export async function sendEmail(
   firstName: string,
@@ -197,7 +199,7 @@ export class CustomerService {
 
     //       const newCustomer = this.customerRepository.create({
     //         customerId: '90988772263636631',
-    //         email: "elliottmmorris@gmail.com",
+    //         email: "zaid.wixpatriots@gmail.com",
     //         createdAt:  new Date(),
     //         firstName: 'Elliot',
     //         lastName: "Morris" ,
@@ -208,17 +210,26 @@ export class CustomerService {
     //       });
     //       console.log("+++", rawPassword)
     //       await this.customerRepository.save(newCustomer);
-          
-    //           await sendEmail(
-    //             newCustomer.firstName,
-    //             newCustomer.email,
-    //             rawPassword,
-    //           )
 
-    console.log("script started")
+    //       const emailTemplate = LightHeartInviteEmail(
+    //         newCustomer.firstName,
+    //         newCustomer.email,
+    //         rawPassword,
+    //         `${process.env.FRONTEND_URL}`
+    //         );
+
+    //         await sendEmailBySendgrid(
+    //           'zaid.wixpatriots@gmail.com',
+    //           'Create Your Listing on the Light Heart Artist Map!',
+    //           'Hi!',
+    //           emailTemplate
+    //         );
+    //       await this.customerRepository.update(newCustomer.id, { email_sent: true });
+
+    console.log('script started--------------------------------');
     const customers = await this.shopifyService.getCustomersFromShopify();
     const customerIds = customers.map((c) => `${c.id}`);
-    console.log("users fetched form shopify", customerIds.length)
+    console.log('users fetched form shopify', customerIds.length);
 
     const existingCustomers = await this.customerRepository.find({
       where: { customerId: In(customerIds) },
@@ -250,19 +261,28 @@ export class CustomerService {
           });
           await this.customerRepository.save(newCustomer);
 
-          console.log("user created", newCustomer, rawPassword)
-          
+          console.log('user created', newCustomer, rawPassword);
 
           if (customer.email) {
-            await sendEmail(
-                newCustomer.firstName,
-                newCustomer.email,
-                rawPassword,
-              )
+            const emailTemplate = LightHeartInviteEmail(
+              newCustomer.firstName,
+              newCustomer.email,
+              rawPassword,
+              `${process.env.FRONTEND_URL}`,
+            );
 
-            await this.customerRepository.update(newCustomer.id, { email_sent: true });
-            console.log("email sent")
-        }
+            await sendEmailBySendgrid(
+              newCustomer.email,
+              'Create Your Listing on the Light Heart Artist Map!',
+              'Hi!',
+              emailTemplate,
+            );
+
+            await this.customerRepository.update(newCustomer.id, {
+              email_sent: true,
+            });
+            console.log('email sent');
+          }
         } catch (error) {
           console.error(`Error processing customer ${customer.id}:`, error);
           failedCustomers.push({
