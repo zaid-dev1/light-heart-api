@@ -11,7 +11,7 @@ WORKDIR /usr/src/app
 
 # Copy package manifests and install all deps
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN npm install
 
 # Copy tsconfig and nest config
 COPY tsconfig*.json ./
