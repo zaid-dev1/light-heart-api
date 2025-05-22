@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { chunk } from 'lodash';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
 import * as nodemailer from 'nodemailer';
@@ -191,117 +192,159 @@ export class CustomerService {
     };
   }
 
+  //Send static email for testing
+  // const rawPassword = Math.random().toString(36).slice(-8);
+  //       const hashedPassword = await bcrypt.hash(rawPassword, 10);
+
+  //       const newCustomer = this.customerRepository.create({
+  //         customerId: '90988772263636631',
+  //         email: "zaid.wixpatriots@gmail.com",
+  //         createdAt:  new Date(),
+  //         firstName: 'Elliot',
+  //         lastName: "Morris" ,
+  //         phone: "7283733788229",
+  //         password: hashedPassword,
+  //         role: 'admin',
+  //         courses: '',
+  //       });
+  //       console.log("+++", rawPassword)
+  //       await this.customerRepository.save(newCustomer);
+
+  //       const emailTemplate = LightHeartInviteEmail(
+  //         newCustomer.firstName,
+  //         newCustomer.email,
+  //         rawPassword,
+  //         `${process.env.FRONTEND_URL}`
+  //         );
+
+  //         await sendEmailBySendgrid(
+  //           'zaid.wixpatriots@gmail.com',
+  //           'Create Your Listing on the Light Heart Artist Map!',
+  //           'Hi!',
+  //           emailTemplate
+  //         );
+  //       await this.customerRepository.update(newCustomer.id, { email_sent: true });
+
   async saveCustomersOnce(): Promise<void> {
+    try {
+      console.log('script started--------------------------------');
+      const customers = await this.shopifyService.getCustomersFromShopify();
+      const customerIds = customers.map((c) => `${c.id}`);
+      
+      console.log('users fetched form shopify', customerIds.length);
 
-    //Send static email for testing
-    // const rawPassword = Math.random().toString(36).slice(-8);
-    //       const hashedPassword = await bcrypt.hash(rawPassword, 10);
+      const existingCustomers = await this.customerRepository.find({
+        where: { customerId: In(customerIds) },
+        select: ['customerId'],
+      });
 
-    //       const newCustomer = this.customerRepository.create({
-    //         customerId: '90988772263636631',
-    //         email: "zaid.wixpatriots@gmail.com",
-    //         createdAt:  new Date(),
-    //         firstName: 'Elliot',
-    //         lastName: "Morris" ,
-    //         phone: "7283733788229",
-    //         password: hashedPassword,
-    //         role: 'admin',
-    //         courses: '',
-    //       });
-    //       console.log("+++", rawPassword)
-    //       await this.customerRepository.save(newCustomer);
+      const existingCustomerIds = new Set(
+        existingCustomers.map((c) => c.customerId),
+      );
 
-    //       const emailTemplate = LightHeartInviteEmail(
-    //         newCustomer.firstName,
-    //         newCustomer.email,
-    //         rawPassword,
-    //         `${process.env.FRONTEND_URL}`
-    //         );
+      const failedCustomers = [];
 
-    //         await sendEmailBySendgrid(
-    //           'zaid.wixpatriots@gmail.com',
-    //           'Create Your Listing on the Light Heart Artist Map!',
-    //           'Hi!',
-    //           emailTemplate
-    //         );
-    //       await this.customerRepository.update(newCustomer.id, { email_sent: true });
+      for (const customer of customers) {
+        if (!existingCustomerIds.has(`${customer.id}`)) {
+          try {
+            const rawPassword = Math.random().toString(36).slice(-8);
+            const hashedPassword = await bcrypt.hash(rawPassword, 10);
 
-    console.log('script started--------------------------------');
-    const customers = await this.shopifyService.getCustomersFromShopify();
-    const customerIds = customers.map((c) => `${c.id}`);
-    console.log('users fetched form shopify', customerIds.length);
-
-    const existingCustomers = await this.customerRepository.find({
-      where: { customerId: In(customerIds) },
-      select: ['customerId'],
-    });
-
-    const existingCustomerIds = new Set(
-      existingCustomers.map((c) => c.customerId),
-    );
-    const failedCustomers = [];
-
-    for (const customer of customers) {
-      if (!existingCustomerIds.has(`${customer.id}`)) {
-        try {
-          const rawPassword = Math.random().toString(36).slice(-8);
-          const hashedPassword = await bcrypt.hash(rawPassword, 10);
-
-          const newCustomer = this.customerRepository.create({
-            customerId: `${customer.id}`,
-            email: customer.email,
-            createdAt: customer.createdAt || null,
-            firstName: customer.firstName || null,
-            lastName: customer.lastName || null,
-            phone: customer.phone || null,
-            password: hashedPassword,
-            role: customer.role || null,
-            courses: customer.courses || '',
-            email_sent: false,
-          });
-          await this.customerRepository.save(newCustomer);
-
-          console.log('user created', newCustomer, rawPassword);
-
-          if (customer.email) {
-            const emailTemplate = LightHeartInviteEmail(
-              newCustomer.firstName,
-              newCustomer.email,
+            const newCustomer = this.customerRepository.create({
+              customerId: `${customer.id}`,
+              email: customer.email,
+              createdAt: customer.createdAt || null,
+              firstName: customer.firstName || null,
+              lastName: customer.lastName || null,
+              phone: customer.phone || null,
+              password: hashedPassword,
               rawPassword,
-              `${process.env.FRONTEND_URL}`,
-            );
-
-            await sendEmailBySendgrid(
-              newCustomer.email,
-              'Create Your Listing on the Light Heart Artist Map!',
-              'Hi!',
-              emailTemplate,
-            );
-
-            await this.customerRepository.update(newCustomer.id, {
-              email_sent: true,
+              role: customer.role || null,
+              courses: customer.courses || '',
+              email_sent: false,
             });
-            console.log('email sent');
+
+            await this.customerRepository.save(newCustomer);
+
+            console.log('user created', newCustomer);
+
+          } catch (error) {
+            console.error(`Error processing customer ${customer.id}:`, error);
+            failedCustomers.push({
+              customerId: customer.id,
+              reason: 'Insertion failed',
+            });
           }
-        } catch (error) {
-          console.error(`Error processing customer ${customer.id}:`, error);
-          failedCustomers.push({
-            customerId: customer.id,
-            reason: 'Insertion failed',
-          });
         }
       }
+
+      console.log('customers loop done--', 'failedCustomer:', failedCustomers);
+    } catch (error) {
+      console.log('error in saveCustomersOnce', error);
     }
+  }
 
-    console.log("customers loop done")
+  async sendEmailsToCustomers(): Promise<void> {
+
+    const BATCH_SIZE = parseInt(process.env.EMAIL_BATCH_SIZE || '500', 10);
+    const BATCH_DELAY_MS = parseInt(
+      process.env.EMAIL_BATCH_DELAY_MS || '2000',
+      10,
+    );
+
+    const allPendingInvites = await this.customerRepository.find({
+      select: ['id', 'customerId', 'email', 'firstName', 'rawPassword'],
+      where: { email_sent: false },
+      take : 1
+    });
+
+    console.log("start emails", allPendingInvites?.length)
+
+    const batches = chunk(allPendingInvites, BATCH_SIZE);
+
+    for (let i = 0; i < batches.length; i++) {
+      const batch = batches[i];
+      await Promise.all(
+        batch.map(async (customer:any) => {
+
+          if (!customer.email) {
+            console.log("Email is null")
+            return
+          }
+
+          const rawPassword = (customer as any).rawPassword;
+
+          const emailHtml = LightHeartInviteEmail(
+            customer.firstName,
+            customer.email,
+            rawPassword,
+            process.env.FRONTEND_URL,
+          );
+
+          try {
+            const response = await sendEmailBySendgrid(
+              customer.email,
+              'Create Your Listing on the Light Heart Artist Map!',
+              'Hi!',
+              emailHtml,
+            );
+
+            if (response) {
+              await this.customerRepository.update(customer.id, {
+                email_sent: true,
+              });
+            }
 
 
-    if (failedCustomers.length > 0) {
-      console.log("customer failed", failedCustomers.length)
-      console.warn(
-        `Failed to process ${failedCustomers.length} customers.`,
-        failedCustomers,
+          } catch (err) {
+            console.error(`Email failed for ${customer.customerId}:`, err);
+          }
+        }),
       );
+
+      if (BATCH_DELAY_MS > 0 && i < batches.length - 1) {
+        await new Promise((res) => setTimeout(res, BATCH_DELAY_MS));
+      }
     }
   }
 

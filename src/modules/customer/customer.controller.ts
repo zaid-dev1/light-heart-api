@@ -49,6 +49,12 @@ export class CustomerController {
     return 'Customers have been initialized and saved successfully.';
   }
 
+  @Post('send-emails')
+  async sendEmailsToCustomers(
+  ): Promise<any> {
+    return this.customerService.sendEmailsToCustomers();
+  }
+
   @Post('login')
   async login(@Body() body: { email: string; password: string }): Promise<any> {
     const { email, password } = body;

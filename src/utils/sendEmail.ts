@@ -5,7 +5,7 @@ sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 export async function sendEmailBySendgrid(to: string, subject: string, text: string, html?: string) {
   const msg = {
     to,
-    from: 'zaid.wixpatriots@gmail.com',
+    from: process.env.SENDGRID_FROM_EMAIL,
     subject,
     text,
     html,
@@ -13,7 +13,8 @@ export async function sendEmailBySendgrid(to: string, subject: string, text: str
 
   try {
     await sgMail.send(msg);
-    console.log('Email sent');
+    console.log('Email sent to :', to);
+    return true
   } catch (error) {
     console.error('SendGrid Error:', error.response?.body || error.message);
   }

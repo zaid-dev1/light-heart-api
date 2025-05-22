@@ -18,6 +18,10 @@ export class Customer {
   @Column({ name: 'password', type: 'varchar' })
   password: string;
 
+  @IsNotEmpty()
+  @Column({ name: 'rawPassword', type: 'varchar', nullable: true })
+  rawPassword: string;
+
   @IsOptional()
   @Column({ name: 'created_at', nullable: true })
   createdAt: Date;

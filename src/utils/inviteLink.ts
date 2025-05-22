@@ -1,7 +1,7 @@
 export const LightHeartInviteEmail = (
     firstName: string,
     email: string,
-    password: string,
+    rawPassword: string,
     frontendUrl: string
   ) => `
   <!DOCTYPE html>
@@ -76,7 +76,7 @@ export const LightHeartInviteEmail = (
 
       <p style="text-align: left;">
       <span class="highlight">Email:</span> ${email}<br />
-      <span class="highlight">Temporary Password:</span> ${password}
+      <span class="highlight">Temporary Password:</span> ${rawPassword}
       </p>
   
       <ol start="2" style="text-align: left;">
@@ -85,11 +85,11 @@ export const LightHeartInviteEmail = (
       </ol>
   
       <a href="${frontendUrl}" class="cta-button" target="_blank">Log In & Add Your Business Here!</a>
-  
+      
+      <p>If the above link doesn’t work, please copy and paste this URL into your browser: https://map.lightheartlash.com</p>
+      
       <p>The map will automatically display any Light Heart courses you've completed. 🎨✨</p>
-  
-      <p>If you ever need to update your info, just visit the <strong>"Find An Artist"</strong> page on our site and log in.</p>
-    
+      
       <p>Warmly,<br />The Light Heart Team</p>
   
       <div class="footer">
